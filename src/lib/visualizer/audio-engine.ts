@@ -224,6 +224,7 @@ export class AudioEngine {
   private actx: AudioContext | null = null
   private analyser: AnalyserNode | null = null
   private volGain: GainNode | null = null
+  private recDest: MediaStreamAudioDestinationNode | null = null
   private elSource: MediaElementAudioSourceNode | null = null
   private micStream: MediaStream | null = null
   private micSource: MediaStreamAudioSourceNode | null = null
@@ -269,6 +270,9 @@ export class AudioEngine {
       this.volGain = this.actx.createGain()
       this.volGain.gain.value = this.volume
       this.volGain.connect(this.actx.destination)
+      // 录制总线: 收集经过主音量的所有声源 (文件/演示), 不影响扬声器
+      this.recDest = this.actx.createMediaStreamDestination()
+      this.volGain.connect(this.recDest)
     }
     if (this.actx.state === 'suspended') void this.actx.resume()
     if (!this.elSource) {
@@ -336,8 +340,9 @@ export class AudioEngine {
       })
       this.micStream = stream
       this.micSource = this.actx!.createMediaStreamSource(stream)
-      // 只进分析器, 不进扬声器 (避免啸叫)
+      // 只进分析器与录制总线, 不进扬声器 (避免啸叫)
       if (this.analyser) this.micSource.connect(this.analyser)
+      if (this.recDest) this.micSource.connect(this.recDest)
       this.mode = 'mic'
       return true
     } catch {
@@ -379,6 +384,13 @@ export class AudioEngine {
       this.demo = null
     }
     if (this.mode === 'demo') this.mode = 'none'
+  }
+
+  /* ---------- 视频录制 ---------- */
+
+  /** 供 MediaRecorder 使用的音频轨 (文件/演示/麦克风均覆盖), 无音频时返回 null */
+  getRecordAudioTrack(): MediaStreamTrack | null {
+    return this.recDest?.stream.getAudioTracks()[0] ?? null
   }
 
   /* ---------- 每帧分析 ---------- */

@@ -8,7 +8,9 @@ import {
   Radio,
   SkipBack,
   SkipForward,
+  Square,
   Upload,
+  Video,
   Volume2,
   VolumeX,
 } from 'lucide-react'
@@ -46,6 +48,8 @@ interface PlayerBarProps {
   demoActive: boolean
   onToggleMic: () => void
   onUpload: () => void
+  recording: boolean
+  onToggleRecord: () => void
 }
 
 function IconButton({
@@ -106,6 +110,8 @@ export function PlayerBar(props: PlayerBarProps) {
     demoActive,
     onToggleMic,
     onUpload,
+    recording,
+    onToggleRecord,
   } = props
 
   return (
@@ -192,6 +198,13 @@ export function PlayerBar(props: PlayerBarProps) {
                 onValueChange={(v) => onVolume(v[0] / 100)}
               />
             </div>
+            <IconButton
+              label={recording ? '停止录制' : '录制可视化视频'}
+              onClick={onToggleRecord}
+              active={recording}
+            >
+              {recording ? <Square className="size-4 fill-current" /> : <Video className="size-4" />}
+            </IconButton>
             <IconButton
               label={micActive ? '关闭麦克风' : '麦克风可视化'}
               onClick={onToggleMic}

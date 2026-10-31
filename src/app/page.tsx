@@ -26,6 +26,12 @@ function isAudioFile(f: File): boolean {
   )
 }
 
+function formatRecTime(s: number): string {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+}
+
 export default function Page() {
   /* ---------- refs ---------- */
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -39,6 +45,10 @@ export default function Page() {
   const indexRef = useRef(0)
   const endedRef = useRef<() => void>(() => {})
   const volumeRef = useRef(INITIAL_VOLUME)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recordingRef = useRef(false)
 
   /* ---------- state ---------- */
   const [mode, setMode] = useState<ModeId>('nebula')
@@ -54,6 +64,8 @@ export default function Page() {
   const [dragging, setDragging] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [hint, setHint] = useState('')
+  const [recording, setRecording] = useState(false)
+  const [recSeconds, setRecSeconds] = useState(0)
 
   const getEngine = useCallback(() => {
     if (!engineRef.current) engineRef.current = new AudioEngine()
@@ -90,7 +102,8 @@ export default function Page() {
       if (!w || !h) return
       const engine = getEngine()
 
-      const dpr = Math.min(2, window.devicePixelRatio || 1)
+      // 录制时降到 1x 分辨率, 保证导出体量与编码稳定
+      const dpr = recordingRef.current ? 1 : Math.min(2, window.devicePixelRatio || 1)
       if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
         canvas.width = Math.round(w * dpr)
         canvas.height = Math.round(h * dpr)
@@ -283,6 +296,98 @@ export default function Page() {
     })
   }, [getEngine])
 
+  /* ---------- 视频录制 ---------- */
+  const startRecording = useCallback(async () => {
+    const canvas = canvasRef.current
+    if (!canvas || typeof MediaRecorder === 'undefined' || !canvas.captureStream) {
+      setHint('当前浏览器不支持视频录制')
+      return
+    }
+    if (recordingRef.current) return
+    try {
+      // 先同步切到 1x 分辨率并等两帧, 避免 H.264 编码器遇到录制中分辨率变更
+      recordingRef.current = true
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      canvas.width = Math.round(w)
+      canvas.height = Math.round(h)
+      rendererRef.current?.init(w, h)
+      clearRef.current = true
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+
+      const videoStream = canvas.captureStream(60)
+      const audioTrack = getEngine().getRecordAudioTrack()
+      const tracks = [...videoStream.getVideoTracks()]
+      if (audioTrack) tracks.push(audioTrack)
+      else if (getEngine().mode === 'none') setHint('当前没有音频输入，将录制无声画面')
+      const stream = new MediaStream(tracks)
+
+      const mime = [
+        'video/mp4;codecs="avc1.640028,mp4a.40.2"',
+        'video/mp4',
+        'video/webm;codecs=vp9,opus',
+        'video/webm',
+      ].find((t) => MediaRecorder.isTypeSupported(t))
+      const rec = new MediaRecorder(
+        stream,
+        mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 192_000 } : undefined
+      )
+      chunksRef.current = []
+      rec.ondataavailable = (e) => {
+        if (e.data.size) chunksRef.current.push(e.data)
+      }
+      rec.onstop = () => {
+        const type = rec.mimeType || 'video/webm'
+        const blob = new Blob(chunksRef.current, { type })
+        chunksRef.current = []
+        if (blob.size) {
+          const ext = type.includes('mp4') ? 'mp4' : 'webm'
+          const eng = getEngine()
+          const raw =
+            eng.mode === 'demo'
+              ? '演示音轨'
+              : eng.mode === 'mic'
+                ? '麦克风'
+                : (tracksRef.current[indexRef.current]?.name ?? '可视化')
+          const safe = raw.replace(/[\\/:*?"<>|]/g, '').slice(0, 40) || '可视化'
+          const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `观声-${safe}-${stamp}.${ext}`
+          a.click()
+          setTimeout(() => URL.revokeObjectURL(url), 5000)
+          setHint(`视频已导出 (${(blob.size / 1048576).toFixed(1)} MB) · 已开始下载`)
+        }
+      }
+      rec.start(1000)
+      recorderRef.current = rec
+      setRecording(true)
+      setRecSeconds(0)
+      recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000)
+    } catch {
+      recordingRef.current = false
+      setHint('录制启动失败，请重试')
+    }
+  }, [getEngine])
+
+  const stopRecording = useCallback(() => {
+    const rec = recorderRef.current
+    if (rec && rec.state !== 'inactive') rec.stop()
+    recorderRef.current = null
+    recordingRef.current = false
+    if (recTimerRef.current) {
+      clearInterval(recTimerRef.current)
+      recTimerRef.current = null
+    }
+    setRecording(false)
+  }, [])
+
+  const toggleRecord = useCallback(() => {
+    if (recordingRef.current) stopRecording()
+    else void startRecording()
+  }, [startRecording, stopRecording])
+
   /* ---------- 全屏 ---------- */
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
@@ -387,6 +492,8 @@ export default function Page() {
     const engine = getEngine()
     engine.setVolume(INITIAL_VOLUME)
     return () => {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop()
+      if (recTimerRef.current) clearInterval(recTimerRef.current)
       tracksRef.current.forEach((t) => URL.revokeObjectURL(t.url))
       engine.dispose()
     }
@@ -472,10 +579,30 @@ export default function Page() {
 
       {/* 操作提示 */}
       {hint ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-32 z-30 flex justify-center px-4">
+        <div
+          className={`pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4 ${
+            recording ? 'bottom-48' : 'bottom-32'
+          }`}
+        >
           <div className="rounded-full border border-rose-400/30 bg-rose-500/15 px-4 py-1.5 text-xs text-rose-200 backdrop-blur">
             {hint}
           </div>
+        </div>
+      ) : null}
+
+      {/* 录制指示器 */}
+      {recording ? (
+        <div className="fixed inset-x-0 bottom-32 z-40 flex justify-center px-4">
+          <button
+            onClick={stopRecording}
+            className="flex items-center gap-2.5 rounded-full border border-rose-400/40 bg-rose-500/20 px-5 py-2 text-sm font-medium text-rose-100 shadow-lg shadow-rose-500/20 backdrop-blur-xl transition hover:bg-rose-500/30"
+          >
+            <span className="relative flex size-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-rose-500" />
+            </span>
+            REC {formatRecTime(recSeconds)} · 点击停止
+          </button>
         </div>
       ) : null}
 
@@ -503,6 +630,8 @@ export default function Page() {
         demoActive={source === 'demo'}
         onToggleMic={() => void toggleMic()}
         onUpload={() => fileInputRef.current?.click()}
+        recording={recording}
+        onToggleRecord={toggleRecord}
       />
 
       {dragging ? <DropOverlay /> : null}
