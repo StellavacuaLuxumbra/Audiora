@@ -445,8 +445,8 @@ export default function Page() {
             <AudioWaveform className="size-5 text-fuchsia-300" />
           </div>
           <div>
-            <div className="text-sm font-semibold tracking-wide">声之形</div>
-            <div className="text-[10px] uppercase tracking-[0.28em] text-white/40">audio bloom</div>
+            <div className="text-sm font-semibold tracking-wide">观声</div>
+            <div className="text-[10px] uppercase tracking-[0.28em] text-white/40">audiora · see sound</div>
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -23,11 +23,11 @@ export function EmptyState({ onPick, onDemo }: EmptyStateProps) {
       </div>
 
       <div>
-        <h1 className="bg-gradient-to-r from-amber-200 via-rose-300 to-fuchsia-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
-          声之形
+        <h1 className="bg-gradient-to-r from-amber-200 via-rose-300 to-fuchsia-300 bg-clip-text text-4xl font-bold tracking-[0.2em] text-transparent sm:text-5xl">
+          观声
         </h1>
         <p className="mt-3 text-sm text-white/55 sm:text-base">
-          导入一首音乐，开启沉浸式音频可视化之旅
+          让每一首歌，长出光的形状
         </p>
       </div>
 

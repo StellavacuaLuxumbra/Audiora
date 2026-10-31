@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "声之形 · 沉浸式音频可视化",
-  description: "导入音乐，体验星云粒子、光环频谱、流光波纹与星际隧道等炫酷的实时音频可视化效果。",
-  keywords: ["音频可视化", "音乐播放器", "频谱", "粒子", "Web Audio", "Canvas"],
+  title: "观声 Audiora · 沉浸式音频可视化",
+  description: "看见声音的颜色。导入音乐，体验星云粒子、光环频谱、流光波纹与星际隧道等炫酷的实时音频可视化。",
+  keywords: ["音频可视化", "音乐播放器", "频谱", "粒子", "Web Audio", "Canvas", "观声", "Audiora"],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
