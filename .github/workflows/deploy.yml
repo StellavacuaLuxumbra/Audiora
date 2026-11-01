@@ -3,7 +3,7 @@ name: Deploy Next.js site to Pages
 
 on:
   push:
-    branches: ["main"]     # 默认分支是 master 就改这里
+    branches: ["main"]     # 默认分支是 master 就改成 master
   workflow_dispatch:        # 允许在 Actions 页面手动触发
 
 # 部署 Pages 所需权限
@@ -21,11 +21,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
@@ -39,17 +37,25 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Pages 返回 base_path：项目站 → /<仓库名>，用户站 → 空
+      # Pages 返回 base_path：项目站 → /<仓库名>，用户主站 → 空
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
 
-      - name: Build with Next.js (static export)
-        run: bun run build
+      # ★ 关键：build:gh = GITHUB_EXPORT=1 next build → 走静态导出分支，产出 out/
+      - name: Build static export
+        run: bun run build:gh
         env:
-          DEPLOY_TARGET: pages        # 让 next.config.ts 走 output: "export" 分支
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
           NEXT_TELEMETRY_DISABLED: 1
+
+      # 保险：out/ 没生成时直接报人话错误
+      - name: Verify static export output
+        run: |
+          if [ ! -f out/index.html ]; then
+            echo "::error::out/ 未生成 —— 构建没走静态导出分支，请检查 next.config.ts 是否为 GITHUB_EXPORT 双模式版本"
+            exit 1
+          fi
 
       - name: Add .nojekyll
         run: touch out/.nojekyll
