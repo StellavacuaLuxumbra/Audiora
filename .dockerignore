@@ -1,0 +1,22 @@
+node_modules
+.next
+.git
+.gitignore
+dev.log
+server.log
+*.log
+
+# 本地数据与示例, 不进入镜像
+db
+prisma/*.db
+download
+upload
+mini-services
+examples
+skills
+tests
+
+Dockerfile
+.dockerignore
+docker-compose.yml
+deploy
